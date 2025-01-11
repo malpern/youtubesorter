@@ -52,3 +52,9 @@ data/cache/
 # Logs
 *.log
 logs/
+
+# Coverage artifacts
+coverage_html/
+htmlcov/
+coverage_details.json
+.coverage
