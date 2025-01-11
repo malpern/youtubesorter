@@ -1,0 +1,7 @@
+[MASTER]
+# Add the command checker plugin
+load-plugins=pylint_plugins.command_checker
+
+[MESSAGES CONTROL]
+# Enable the custom warnings
+enable=invalid-command-inheritance,new-command-base-class 

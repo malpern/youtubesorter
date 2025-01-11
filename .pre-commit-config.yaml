@@ -1,0 +1,26 @@
+repos:
+- repo: local
+  hooks:
+    - id: command-inheritance-test
+      name: Check command inheritance
+      entry: pytest tests/test_commands.py::TestYouTubeCommand::test_all_commands_inherit_from_base -v
+      language: system
+      pass_filenames: false
+      types: [python]
+      files: ^src/commands/.*\.py$
+
+    - id: pylint
+      name: pylint
+      entry: pylint
+      language: system
+      types: [python]
+      args: [
+        "--rcfile=.pylintrc",  # Use our custom config
+      ]
+
+    - id: pytest
+      name: pytest
+      entry: pytest
+      language: system
+      pass_filenames: false
+      always_run: true 
