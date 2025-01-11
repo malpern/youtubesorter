@@ -1,29 +1,45 @@
-"""Undo operation management."""
+"""Manages undo operations."""
 
 import json
 import os
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Dict, List, Optional, Set
 
+from .config import STATE_DIR
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
 
-UNDO_DIR = Path.home() / ".youtubesorter" / "undo"
 
-
-@dataclass
 class UndoOperation:
-    """Class representing an operation that can be undone."""
+    """Represents an operation that can be undone."""
 
-    timestamp: float
-    operation_type: str  # 'distribute' or 'consolidate'
-    source_playlists: List[str]
-    target_playlists: List[str]
-    was_move: bool
-    videos: List[Dict]  # List of video info dicts
-    target_mapping: Dict[str, List[str]]  # Maps target playlist to video IDs
+    def __init__(
+        self,
+        operation_type: str,
+        source_playlists: List[str],
+        target_playlists: List[str],
+        was_move: bool,
+        videos: Dict[str, Dict],
+        target_mapping: Dict[str, str],
+    ) -> None:
+        """Initialize undo operation.
+
+        Args:
+            operation_type: Type of operation ('distribute' or 'consolidate')
+            source_playlists: List of source playlist IDs
+            target_playlists: List of target playlist IDs
+            was_move: Whether videos were moved or copied
+            videos: Dictionary of video data
+            target_mapping: Mapping of video IDs to target playlists
+        """
+        self.timestamp = datetime.now().isoformat()
+        self.operation_type = operation_type
+        self.source_playlists = source_playlists
+        self.target_playlists = target_playlists
+        self.was_move = was_move
+        self.videos = videos
+        self.target_mapping = target_mapping
 
 
 class UndoManager:
@@ -36,7 +52,8 @@ class UndoManager:
             operation_type: Type of operation ('distribute' or 'consolidate')
         """
         self.operation_type = operation_type
-        self.state_file = f".youtubesorter_{operation_type}_undo.json"
+        os.makedirs(STATE_DIR, exist_ok=True)
+        self.state_file = os.path.join(STATE_DIR, f"youtubesorter_{operation_type}_undo.json")
 
     def save_operation(self, operation: UndoOperation) -> None:
         """Save an operation to the undo state file.
@@ -59,9 +76,13 @@ class UndoManager:
             "target_mapping": operation.target_mapping,
         }
 
-        with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2)
-        logger.info("Saved undo operation to %s", self.state_file)
+        try:
+            os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+            with open(self.state_file, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2)
+            logger.info("Saved undo operation to %s", self.state_file)
+        except Exception as e:
+            logger.error("Error saving undo operation: %s", str(e))
 
     def get_last_operation(self) -> Optional[UndoOperation]:
         """Get the last operation from the undo state file.

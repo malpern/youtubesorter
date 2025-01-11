@@ -308,9 +308,50 @@ def test_quota_exceeded_recovery():
 ### 2. Data Protection
 
 - No permanent storage of video data
-- Secure cache file permissions
-- Clean up of temporary files
+- Secure file permissions
+- Clean directory structure:
+  ```
+  data/
+  ├── credentials/  # API credentials and tokens
+  ├── cache/       # Cached API responses
+  ├── state/       # Operation state files
+  └── recovery/    # Recovery files
+  ```
 - Sanitized error messages
+
+### 3. File Management
+
+The system uses a structured approach to file management:
+
+1. **Credentials Directory** (`data/credentials/`)
+   - OAuth2 tokens
+   - API credentials
+   - Secure permissions
+
+2. **Cache Directory** (`data/cache/`)
+   - TTL-based caching
+   - Playlist metadata
+   - Video information
+   - Auto-cleanup after 7 days
+
+3. **State Directory** (`data/state/`)
+   - Operation state files
+   - Undo operation history
+   - Command progress tracking
+
+4. **Recovery Directory** (`data/recovery/`)
+   - Interrupted operation state
+   - Progress tracking
+   - Auto-cleanup of old files
+
+All directories are configurable via environment variables:
+```bash
+DATA_DIR=/path/to/data
+CREDENTIALS_DIR=/path/to/credentials
+CACHE_DIR=/path/to/cache
+STATE_DIR=/path/to/state
+RECOVERY_DIR=/path/to/recovery
+```
 
 ## Future Enhancements
 

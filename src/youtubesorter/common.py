@@ -6,11 +6,14 @@ import logging
 import os
 from glob import glob
 from typing import List, Optional, Tuple, Dict, Any
+from datetime import datetime
 
 from . import api
 from . import classifier
+from .config import STATE_DIR
+from .logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def classify_video_titles(videos: List[Dict[str, Any]], filter_prompt: str) -> List[bool]:
@@ -179,44 +182,12 @@ def process_videos(
         return [], video_ids, []
 
 
-def save_undo_operation(
-    target_playlist: str,
-    processed: List[str],
-    failed: List[str],
-    skipped: List[str],
-    state_file: str,
-) -> None:
-    """Save undo operation state.
-
-    Args:
-        target_playlist: Target playlist ID
-        processed: List of processed video IDs
-        failed: List of failed video IDs
-        skipped: List of skipped video IDs
-        state_file: Path to state file
-    """
-    try:
-        with open(state_file, "w", encoding="utf-8") as f:
-            json.dump(
-                {
-                    "target_playlist": target_playlist,
-                    "processed_videos": processed,
-                    "failed_videos": failed,
-                    "skipped_videos": skipped,
-                    "operation_type": "undo",
-                },
-                f,
-            )
-    except IOError:
-        logger.error("Failed to save undo operation state")
-
-
 def save_operation_state(
     target_playlist: str,
     processed: List[str],
     failed: List[str],
     skipped: List[str],
-    state_file: str,
+    state_file: Optional[str] = None,
 ) -> None:
     """Save operation state.
 
@@ -225,9 +196,15 @@ def save_operation_state(
         processed: List of processed video IDs
         failed: List of failed video IDs
         skipped: List of skipped video IDs
-        state_file: Path to state file
+        state_file: Path to state file. If None, uses default in state directory.
     """
     try:
+        if state_file is None:
+            os.makedirs(STATE_DIR, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            state_file = os.path.join(STATE_DIR, f"youtubesorter_{target_playlist}_{timestamp}.json")
+
+        os.makedirs(os.path.dirname(state_file), exist_ok=True)
         with open(state_file, "w", encoding="utf-8") as f:
             json.dump(
                 {
@@ -238,9 +215,49 @@ def save_operation_state(
                     "operation_type": "move",
                 },
                 f,
+                indent=2,
             )
     except IOError:
         logger.error("Failed to save operation state")
+
+
+def save_undo_operation(
+    target_playlist: str,
+    processed: List[str],
+    failed: List[str],
+    skipped: List[str],
+    state_file: Optional[str] = None,
+) -> None:
+    """Save undo operation state.
+
+    Args:
+        target_playlist: Target playlist ID
+        processed: List of processed video IDs
+        failed: List of failed video IDs
+        skipped: List of skipped video IDs
+        state_file: Path to state file. If None, uses default in state directory.
+    """
+    try:
+        if state_file is None:
+            os.makedirs(STATE_DIR, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            state_file = os.path.join(STATE_DIR, f"youtubesorter_undo_{target_playlist}_{timestamp}.json")
+
+        os.makedirs(os.path.dirname(state_file), exist_ok=True)
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "target_playlist": target_playlist,
+                    "processed_videos": processed,
+                    "failed_videos": failed,
+                    "skipped_videos": skipped,
+                    "operation_type": "undo",
+                },
+                f,
+                indent=2,
+            )
+    except IOError:
+        logger.error("Failed to save undo operation state")
 
 
 def load_operation_state(state_file: str) -> dict:

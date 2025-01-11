@@ -102,11 +102,21 @@ The tool automatically handles rate limiting with exponential backoff. If you en
 
 ## Advanced Configuration
 
-### Custom Cache Directory
+### Directory Structure
 
-Set `CACHE_DIR` in your `.env` file to change the cache location:
+The tool uses the following directory structure under `data/`:
+- `credentials/`: API credentials and tokens
+- `cache/`: Cached API responses
+- `state/`: Operation state files for undo/recovery
+- `recovery/`: Recovery files for interrupted operations
+
+You can customize these locations by setting environment variables:
 ```bash
+DATA_DIR=/path/to/data
+CREDENTIALS_DIR=/path/to/credentials
 CACHE_DIR=/path/to/cache
+STATE_DIR=/path/to/state
+RECOVERY_DIR=/path/to/recovery
 ```
 
 ### Debug Logging

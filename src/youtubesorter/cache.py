@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
+from .config import CACHE_DIR
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -29,12 +30,15 @@ class CacheStats:
 class PlaylistCache:
     """Cache for playlist information."""
 
-    def __init__(self, cache_file: str = ".youtubesorter_cache.json") -> None:
+    def __init__(self, cache_file: Optional[str] = None) -> None:
         """Initialize playlist cache.
 
         Args:
-            cache_file: Path to cache file
+            cache_file: Path to cache file. If None, uses default in cache directory.
         """
+        if cache_file is None:
+            os.makedirs(CACHE_DIR, exist_ok=True)
+            cache_file = os.path.join(CACHE_DIR, "playlist_cache.json")
         self.cache_file = cache_file
         self.cache: Dict = {}
         self.stats = CacheStats()
@@ -55,6 +59,7 @@ class PlaylistCache:
     def _save_cache(self) -> None:
         """Save cache to file."""
         try:
+            os.makedirs(os.path.dirname(self.cache_file), exist_ok=True)
             with open(self.cache_file, "w", encoding="utf-8") as f:
                 json.dump(self.cache, f, indent=2)
         except Exception as e:

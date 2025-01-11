@@ -43,6 +43,8 @@ htmlcov/
 .env*
 data/credentials*/
 data/recovery/
+data/state/
+data/cache/
 *.json
 !pyproject.json
 !package.json

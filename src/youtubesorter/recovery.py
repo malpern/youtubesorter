@@ -1,10 +1,10 @@
-"""Recovery manager for handling interrupted operations."""
+"""Manages recovery state for interrupted operations."""
 
 import json
 import os
-from typing import Dict, List, Optional, Set
+from typing import Dict, Optional, Set
 
-from .api import YouTubeAPI
+from .config import RECOVERY_DIR
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -28,7 +28,10 @@ class RecoveryManager:
         """
         self.playlist_id = playlist_id
         self.operation_type = operation_type
-        self.state_file = state_file or f".youtubesorter_{playlist_id}_recovery.json"
+        if state_file is None:
+            os.makedirs(RECOVERY_DIR, exist_ok=True)
+            state_file = os.path.join(RECOVERY_DIR, f"recovery_{playlist_id}_{operation_type}.json")
+        self.state_file = state_file
         self.destination_metadata: Dict = {}
         self.destination_progress: Dict = {}
         self.videos: Dict = {}
@@ -86,6 +89,7 @@ class RecoveryManager:
     def save_state(self) -> None:
         """Save recovery state to file."""
         try:
+            os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
             state = {
                 "playlist_id": self.playlist_id,
                 "operation_type": self.operation_type,
