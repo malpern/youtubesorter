@@ -52,12 +52,12 @@ def test_find_latest_state():
 
         # Test with multiple state files
         mock_glob.return_value = [
-            ".youtubesorter_playlist1_1.json",
-            ".youtubesorter_playlist1_2.json",
+            "data/state/youtubesorter_playlist1_1.json",
+            "data/state/youtubesorter_playlist1_2.json",
         ]
         with patch("os.path.getctime") as mock_getctime:
             mock_getctime.side_effect = lambda x: 2 if x.endswith("2.json") else 1
-            assert common.find_latest_state("playlist1") == ".youtubesorter_playlist1_2.json"
+            assert common.find_latest_state("playlist1") == "data/state/youtubesorter_playlist1_2.json"
 
 
 def test_add_common_arguments():
@@ -423,20 +423,20 @@ def test_find_latest_state_with_empty_playlist_id():
     """Test finding latest state file with empty playlist ID."""
     with patch("src.youtubesorter.common.glob") as mock_glob:
         mock_glob.return_value = [
-            ".youtubesorter_1.json",
-            ".youtubesorter_2.json",
+            "data/state/youtubesorter_1.json",
+            "data/state/youtubesorter_2.json",
         ]
         with patch("os.path.getctime") as mock_getctime:
             mock_getctime.side_effect = lambda x: 2 if x.endswith("2.json") else 1
-            assert common.find_latest_state(None) == ".youtubesorter_2.json"
+            assert common.find_latest_state(None) == "data/state/youtubesorter_2.json"
 
 
 def test_find_latest_state_with_getctime_error():
     """Test finding latest state file when getctime raises an error."""
     with patch("src.youtubesorter.common.glob") as mock_glob:
         mock_glob.return_value = [
-            ".youtubesorter_1.json",
-            ".youtubesorter_2.json",
+            "data/state/youtubesorter_1.json",
+            "data/state/youtubesorter_2.json",
         ]
         with patch("os.path.getctime", side_effect=OSError("Access denied")):
             assert common.find_latest_state("playlist1") is None

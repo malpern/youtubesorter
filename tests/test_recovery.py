@@ -14,12 +14,12 @@ def recovery_manager():
     manager = RecoveryManager(
         playlist_id="playlist123",
         operation_type="test",
-        state_file=".test_recovery.json",
+        state_file="data/recovery/test_recovery.json",
     )
     yield manager
     # Clean up state file after test
-    if os.path.exists(".test_recovery.json"):
-        os.remove(".test_recovery.json")
+    if os.path.exists("data/recovery/test_recovery.json"):
+        os.remove("data/recovery/test_recovery.json")
 
 
 def test_recovery_manager_init():
@@ -30,7 +30,7 @@ def test_recovery_manager_init():
     )
     assert manager.playlist_id == "playlist123"
     assert manager.operation_type == "test"
-    assert manager.state_file == ".youtubesorter_playlist123_recovery.json"
+    assert manager.state_file == "data/recovery/recovery_playlist123_test.json"
     assert manager.destination_metadata == {}
     assert manager.destination_progress == {}
     assert manager.videos == {}
@@ -44,7 +44,7 @@ def test_recovery_manager_context_manager(recovery_manager):
     with patch("builtins.open", mock_open()) as mock_file:
         with recovery_manager:
             pass
-        mock_file.assert_called_once_with(".test_recovery.json", "w", encoding="utf-8")
+        mock_file.assert_called_once_with("data/recovery/test_recovery.json", "w", encoding="utf-8")
 
 
 def test_recovery_manager_load_state():
@@ -106,7 +106,7 @@ def test_recovery_manager_save_state(recovery_manager):
     mock_file = mock_open()
     with patch("builtins.open", mock_file):
         recovery_manager.save_state()
-        mock_file.assert_called_once_with(".test_recovery.json", "w", encoding="utf-8")
+        mock_file.assert_called_once_with("data/recovery/test_recovery.json", "w", encoding="utf-8")
         # Get the actual data written to the file
         written_data = "".join(call.args[0] for call in mock_file().write.call_args_list)
         # Parse it back to compare

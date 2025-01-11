@@ -136,7 +136,8 @@ class TestConsolidateUndo(TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.test_dir = tempfile.mkdtemp()
-        self.state_file = os.path.join(self.test_dir, ".youtubesorter_undo_state.json")
+        self.state_file = os.path.join(self.test_dir, "data/state/youtubesorter_undo_state.json")
+        os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
         self.test_operation = MagicMock(
             timestamp="2023-01-01T00:00:00",
             operation_type="consolidate",
@@ -166,6 +167,8 @@ class TestConsolidateUndo(TestCase):
         """Clean up test fixtures."""
         try:
             os.remove(self.state_file)
+            os.rmdir(os.path.dirname(self.state_file))
+            os.rmdir(os.path.dirname(os.path.dirname(self.state_file)))
             os.rmdir(self.test_dir)
         except OSError:
             pass

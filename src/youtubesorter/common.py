@@ -38,7 +38,11 @@ def find_latest_state(playlist_id: str) -> Optional[str]:
     Returns:
         Path to latest state file if found, None otherwise
     """
-    pattern = f".youtubesorter_{playlist_id}*.json" if playlist_id else ".youtubesorter_*.json"
+    pattern = (
+        os.path.join(STATE_DIR, f"youtubesorter_{playlist_id}*.json")
+        if playlist_id
+        else os.path.join(STATE_DIR, "youtubesorter_*.json")
+    )
     files = glob(pattern)
     if not files:
         return None

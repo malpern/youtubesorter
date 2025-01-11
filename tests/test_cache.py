@@ -12,11 +12,11 @@ from src.youtubesorter.cache import PlaylistCache, CacheStats
 @pytest.fixture
 def cache():
     """Create a PlaylistCache instance."""
-    cache = PlaylistCache(cache_file=".test_cache.json")
+    cache = PlaylistCache(cache_file="data/cache/test_cache.json")
     yield cache
     # Clean up cache file after test
-    if os.path.exists(".test_cache.json"):
-        os.remove(".test_cache.json")
+    if os.path.exists("data/cache/test_cache.json"):
+        os.remove("data/cache/test_cache.json")
 
 
 def test_cache_stats_init():
@@ -41,10 +41,18 @@ def test_cache_stats_reset():
 
 def test_playlist_cache_init():
     """Test PlaylistCache initialization."""
-    cache = PlaylistCache(cache_file=".test_cache.json")
-    assert cache.cache_file == ".test_cache.json"
+    cache = PlaylistCache(cache_file="data/cache/test_cache.json")
+    assert cache.cache_file == "data/cache/test_cache.json"
     assert cache.cache == {}
     assert isinstance(cache.stats, CacheStats)
+
+
+def test_playlist_cache_init_default():
+    """Test PlaylistCache initialization with default path."""
+    with patch("os.makedirs") as mock_makedirs:
+        cache = PlaylistCache()
+        assert cache.cache_file == "data/cache/playlist_cache.json"
+        mock_makedirs.assert_called_once_with("data/cache", exist_ok=True)
 
 
 def test_playlist_cache_load_existing():
