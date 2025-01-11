@@ -56,11 +56,10 @@ youtubededuplicate playlist_id
 
 ## Documentation
 
-- [Installation Guide](INSTALLATION.md) - Detailed setup instructions
-- [Usage Guide](USAGE.md) - Complete command reference
-- [Architecture](ARCHITECTURE.md) - Technical implementation details
-- [Contributing](CONTRIBUTING.md) - Guidelines for contributors
-- [Changelog](CHANGELOG.md) - Version history
+- [Installation Guide](docs/INSTALLATION.md) - Detailed setup instructions
+- [Usage Guide](docs/USAGE.md) - Complete command reference
+- [Architecture](docs/ARCHITECTURE.md) - Technical implementation details
+- [Changelog](docs/CHANGELOG.md) - Version history
 
 ## Key Commands
 
