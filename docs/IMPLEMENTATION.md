@@ -32,9 +32,25 @@
 │   ├── undo.py             # Undo operations
 │   └── utils.py             # Utility functions
 ├── tests/                  # Test suite
-│   ├── run_api_tests.py   # API test runner
-│   ├── run_api_tests.sh   # API test shell script
-│   └── ...                # (rest of tests/ unchanged)
+│   ├── __init__.py
+│   ├── run_api_tests.py    # API test runner
+│   ├── run_api_tests.sh    # API test shell script
+│   ├── test_api.py         # API tests
+│   ├── test_auth.py        # Authentication tests
+│   ├── test_cache.py       # Cache tests
+│   ├── test_classifier.py  # Classification tests
+│   ├── test_cli.py         # CLI tests
+│   ├── test_commands.py    # Command tests
+│   ├── test_common.py      # Utility tests
+│   ├── test_consolidate.py # Consolidation tests
+│   ├── test_deduplicate.py # Deduplication tests
+│   ├── test_distribute.py  # Distribution tests
+│   ├── test_errors.py      # Error handling tests
+│   ├── test_integration.py # Integration tests
+│   ├── test_performance.py # Performance tests
+│   ├── test_quota.py       # Quota management tests
+│   ├── test_recovery.py    # Recovery tests
+│   └── test_utils.py       # Utility tests
 ├── data/                   # Data directory
 │   ├── credentials/         # API credentials
 │   └── recovery/           # Recovery state files
