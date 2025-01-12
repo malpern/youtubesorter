@@ -4,7 +4,13 @@
 
 ```
 .
-├── src/                      # Source code
+├── docs/                    # Documentation
+│   ├── ARCHITECTURE.md     # System architecture
+│   ├── CHANGELOG.md        # Version history
+│   ├── IMPLEMENTATION.md   # Technical details
+│   ├── INSTALLATION.md     # Setup guide
+│   └── USAGE.md           # Usage instructions
+├── src/                    # Source code
 │   ├── __init__.py
 │   ├── api.py               # YouTube API interactions
 │   ├── auth.py              # Authentication handling
@@ -25,43 +31,16 @@
 │   ├── recovery.py          # State recovery
 │   ├── undo.py             # Undo operations
 │   └── utils.py             # Utility functions
-
-├── tests/                   # Test suite
-│   ├── __init__.py
-│   ├── test_api.py
-│   ├── test_auth.py
-│   ├── test_cache.py
-│   ├── test_classifier.py
-│   ├── test_cli.py
-│   ├── test_commands.py
-│   ├── test_common.py
-│   ├── test_consolidate.py
-│   ├── test_deduplicate.py
-│   ├── test_distribute.py
-│   ├── test_errors.py
-│   ├── test_integration.py
-│   ├── test_performance.py
-│   ├── test_quota.py
-│   ├── test_recovery.py
-│   └── test_utils.py
-
-├── data/                    # Data directory
+├── tests/                  # Test suite
+│   ├── run_api_tests.py   # API test runner
+│   ├── run_api_tests.sh   # API test shell script
+│   └── ...                # (rest of tests/ unchanged)
+├── data/                   # Data directory
 │   ├── credentials/         # API credentials
 │   └── recovery/           # Recovery state files
-
-├── .env                     # Environment variables
-├── .env.original           # Backup of original environment
-├── cleanup_recovery.py     # Recovery file cleanup utility
-├── conftest.py            # Pytest configuration
+├── README.md              # Project overview
 ├── pyproject.toml         # Project configuration
-├── pytest.ini             # Pytest settings
-├── requirements.txt       # Python dependencies
-├── run_api_tests.py      # API test runner
-├── run_api_tests.sh      # API test shell script
-├── setup.cfg             # Setup configuration
-├── setup.py              # Package setup
-├── setup_hooks.sh        # Git hooks setup
-└── switch_project.sh     # Project switching utility
+└── ...                    # (other config files)
 ```
 
 ## Architecture Documentation
