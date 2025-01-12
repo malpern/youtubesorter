@@ -2,7 +2,6 @@
 
 from typing import List, Set
 
-from .api import YouTubeAPI
 from .core import YouTubeBase
 from .logging_config import get_logger
 from .commands import YouTubeCommand
@@ -21,23 +20,25 @@ def deduplicate_playlist(youtube: YouTubeBase, playlist_id: str) -> List[str]:
     Returns:
         List of removed video IDs
     """
-    api = YouTubeAPI(youtube)
-    videos = api.get_playlist_videos(playlist_id)
+    videos = youtube.get_playlist_videos(playlist_id)
 
     # Track seen videos by ID
     seen_videos: Set[str] = set()
-    duplicates: List[str] = []
+    duplicates: Set[str] = set()
 
     for video in videos:
         video_id = video["video_id"]
         if video_id in seen_videos:
-            duplicates.append(video_id)
+            duplicates.add(video_id)
         else:
             seen_videos.add(video_id)
 
     # Remove duplicates
     if duplicates:
-        removed = api.batch_remove_videos_from_playlist(duplicates, playlist_id)
+        removed = youtube.batch_remove_videos_from_playlist(
+            playlist_id=playlist_id,
+            video_ids=list(duplicates)
+        )
         logger.info("Removed %d duplicate videos", len(removed))
         return removed
 

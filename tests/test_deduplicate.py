@@ -5,12 +5,20 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.youtubesorter.deduplicate import DeduplicateCommand
+from src.youtubesorter.core import YouTubeBase
 
 
 @pytest.fixture
 def youtube():
     """Create mock YouTube API client."""
-    return MagicMock()
+    mock = MagicMock(spec=YouTubeBase)
+    mock.get_playlist_videos.return_value = [
+        {"video_id": "vid1", "title": "Video 1"},
+        {"video_id": "vid1", "title": "Video 1"},  # Duplicate
+        {"video_id": "vid2", "title": "Video 2"},
+    ]
+    mock.batch_remove_videos_from_playlist.side_effect = lambda playlist_id, video_ids: video_ids
+    return mock
 
 
 def test_deduplicate_command_init(youtube):
@@ -43,17 +51,10 @@ def test_deduplicate_command_run(youtube):
         playlist_id="source1",
     )
 
-    # Mock API responses
-    mock_api = MagicMock()
-    mock_api.get_playlist_videos.return_value = [
-        {"video_id": "vid1", "title": "Video 1"},
-        {"video_id": "vid1", "title": "Video 1"},  # Duplicate
-        {"video_id": "vid2", "title": "Video 2"},
-    ]
-    mock_api.batch_remove_videos_from_playlist.return_value = ["vid1"]
-
-    with patch("src.youtubesorter.deduplicate.YouTubeAPI", return_value=mock_api):
-        result = cmd.run()
+    result = cmd.run()
 
     assert result is True
-    mock_api.batch_remove_videos_from_playlist.assert_called_once_with(["vid1"], "source1")
+    youtube.batch_remove_videos_from_playlist.assert_called_once_with(
+        playlist_id="source1",
+        video_ids=["vid1"]
+    )

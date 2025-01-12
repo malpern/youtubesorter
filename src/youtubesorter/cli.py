@@ -4,9 +4,11 @@ import argparse
 import logging
 import sys
 
-from . import auth, commands, quota, utils, common
+from . import auth, commands, quota, utils
+from .common import undo_operation
 from .errors import YouTubeError
 from .recovery import RecoveryManager
+from .undo import UndoManager
 
 
 logger = logging.getLogger(__name__)
@@ -204,7 +206,19 @@ def main() -> int:
             except SystemExit as e:
                 return 1 if e.code == 2 else e.code
         elif args.command == "undo":
-            success = common.undo_operation(youtube, args.verbose)
+            manager = UndoManager("consolidate")  # Try consolidate first
+            operation = manager.get_last_operation()
+            if not operation:
+                manager = UndoManager("distribute")  # Try distribute next
+                operation = manager.get_last_operation()
+            
+            if not operation:
+                logger.error("No operation to undo")
+                return 1
+            
+            success = undo_operation(youtube, operation, dry_run=False)
+            if success:
+                manager.clear_state()
             return 0 if success else 1
         elif args.command == "quota":
             return 0

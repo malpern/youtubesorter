@@ -47,8 +47,7 @@ class YouTubeCommand:
             YouTubeError: If command fails
         """
         try:
-            if not self._validated:
-                self.validate()
+            self.validate()
             return self._run()
         except Exception as e:
             raise YouTubeError(str(e)) from e

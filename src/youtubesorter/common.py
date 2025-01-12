@@ -15,6 +15,9 @@ from .logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# Default state file path
+STATE_FILE = os.path.join(STATE_DIR, "youtubesorter_state.json")
+
 
 def classify_video_titles(videos: List[Dict[str, Any]], filter_prompt: str) -> List[bool]:
     """Classify videos based on titles.
@@ -176,7 +179,10 @@ def process_videos(
             return processed, failed, []
         else:
             processed = youtube.batch_move_videos_to_playlist(
-                source_playlist, target_playlist, video_ids
+                playlist_id=target_playlist,
+                video_ids=video_ids,
+                source_playlist_id=source_playlist,
+                remove_from_source=True
             )
             failed = [v for v in video_ids if v not in processed]
             return processed, failed, []
@@ -187,42 +193,37 @@ def process_videos(
 
 
 def save_operation_state(
-    target_playlist: str,
-    processed: List[str],
-    failed: List[str],
-    skipped: List[str],
+    playlist_id: str,
+    processed_videos: List[str],
+    failed_videos: List[str],
+    skipped_videos: List[str],
     state_file: Optional[str] = None,
 ) -> None:
-    """Save operation state.
+    """Save operation state to file.
 
     Args:
-        target_playlist: Target playlist ID
-        processed: List of processed video IDs
-        failed: List of failed video IDs
-        skipped: List of skipped video IDs
-        state_file: Path to state file. If None, uses default in state directory.
+        playlist_id: ID of playlist being processed
+        processed_videos: List of processed video IDs
+        failed_videos: List of failed video IDs
+        skipped_videos: List of skipped video IDs
+        state_file: Optional path to state file
     """
     try:
-        if state_file is None:
-            os.makedirs(STATE_DIR, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            state_file = os.path.join(STATE_DIR, f"youtubesorter_{target_playlist}_{timestamp}.json")
+        if not state_file:
+            state_file = os.path.join(STATE_DIR, f"{playlist_id}_state.json")
 
-        os.makedirs(os.path.dirname(state_file), exist_ok=True)
-        with open(state_file, "w", encoding="utf-8") as f:
-            json.dump(
-                {
-                    "target_playlist": target_playlist,
-                    "processed_videos": processed,
-                    "failed_videos": failed,
-                    "skipped_videos": skipped,
-                    "operation_type": "move",
-                },
-                f,
-                indent=2,
-            )
-    except IOError:
-        logger.error("Failed to save operation state")
+        state = {
+            "playlist_id": playlist_id,
+            "processed_videos": processed_videos,
+            "failed_videos": failed_videos,
+            "skipped_videos": skipped_videos,
+        }
+
+        with open(state_file, "w") as f:
+            json.dump(state, f, indent=2)
+
+    except Exception as e:
+        logger.error("Failed to save operation state: %s", str(e))
 
 
 def save_undo_operation(
@@ -264,17 +265,24 @@ def save_undo_operation(
         logger.error("Failed to save undo operation state")
 
 
-def load_operation_state(state_file: str) -> dict:
+def load_operation_state(state_file: str) -> Optional[Dict[str, Any]]:
     """Load operation state.
 
     Args:
         state_file: Path to state file
 
     Returns:
-        Operation state dictionary
+        Operation state dictionary or None if file doesn't exist
     """
-    with open(state_file, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        if not os.path.exists(state_file):
+            return None
+            
+        with open(state_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error("Failed to load operation state: %s", str(e))
+        return None
 
 
 def undo_operation(youtube, verbose=False):
@@ -324,3 +332,28 @@ def undo_operation(youtube, verbose=False):
 
     except Exception as e:
         logger.error("Failed to undo operation: %s", str(e))
+
+
+def clear_operation_state(state_file: Optional[str] = None) -> None:
+    """Clear operation state.
+
+    Args:
+        state_file: Path to state file. If None, uses default in state directory.
+    """
+    try:
+        if state_file is None:
+            # Remove all state files
+            pattern = os.path.join(STATE_DIR, "youtubesorter_*.json")
+            for f in glob(pattern):
+                try:
+                    os.remove(f)
+                except OSError:
+                    logger.error("Failed to remove state file: %s", f)
+        else:
+            # Remove specific state file
+            try:
+                os.remove(state_file)
+            except OSError:
+                logger.error("Failed to remove state file: %s", state_file)
+    except Exception as e:
+        logger.error("Failed to clear operation state: %s", str(e))

@@ -1,7 +1,7 @@
 """YouTube API wrapper."""
 
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from .errors import PlaylistNotFoundError, YouTubeError
 from .auth import get_youtube_service
@@ -33,17 +33,17 @@ def get_playlist_videos(playlist_id: str, use_cache: bool = True) -> List[Dict[s
 
 
 def batch_move_videos_to_playlist(
-    source_playlist: str,
     target_playlist: str,
     video_ids: List[str],
+    source_playlist: Optional[str] = None,
     remove_from_source: bool = True,
 ) -> List[str]:
     """Move multiple videos between playlists.
 
     Args:
-        source_playlist: ID of source playlist
         target_playlist: ID of target playlist
         video_ids: List of video IDs to move
+        source_playlist: Optional ID of source playlist (for validation)
         remove_from_source: Whether to remove videos from source playlist
 
     Returns:
@@ -59,9 +59,9 @@ def batch_move_videos_to_playlist(
 
     api = YouTubeAPI(youtube)
     return api.batch_move_videos_to_playlist(
-        source_playlist,
         target_playlist,
         video_ids,
+        source_playlist,
         remove_from_source,
     )
 
@@ -119,7 +119,7 @@ class YouTubeAPI:
             while True:
                 # Get playlist items
                 request = self.youtube.playlistItems().list(
-                    part="snippet,contentDetails",
+                    part="snippet",
                     playlistId=playlist_id,
                     maxResults=50,
                     pageToken=page_token,
@@ -134,12 +134,12 @@ class YouTubeAPI:
 
                 # Extract video info
                 for item in response.get("items", []):
-                    video = {
-                        "video_id": item["contentDetails"]["videoId"],
-                        "title": item["snippet"]["title"],
-                        "description": item["snippet"]["description"],
-                    }
-                    videos.append(video)
+                    snippet = item["snippet"]
+                    videos.append({
+                        "video_id": snippet["resourceId"]["videoId"],
+                        "title": snippet["title"],
+                        "description": snippet.get("description", ""),
+                    })
 
                 # Get next page token
                 page_token = response.get("nextPageToken")
@@ -155,17 +155,17 @@ class YouTubeAPI:
 
     def batch_move_videos_to_playlist(
         self,
-        source_playlist: str,
         target_playlist: str,
         video_ids: List[str],
+        source_playlist: Optional[str] = None,
         remove_from_source: bool = True,
     ) -> List[str]:
         """Move multiple videos between playlists.
 
         Args:
-            source_playlist: ID of source playlist
             target_playlist: ID of target playlist
             video_ids: List of video IDs to move
+            source_playlist: Optional ID of source playlist (for validation)
             remove_from_source: Whether to remove videos from source playlist
 
         Returns:
@@ -179,7 +179,7 @@ class YouTubeAPI:
         added = self.batch_add_videos_to_playlist(target_playlist, video_ids)
 
         # If successful and remove_from_source is True, remove from source
-        if added and remove_from_source:
+        if added and remove_from_source and source_playlist:
             removed = self.batch_remove_videos_from_playlist(source_playlist, video_ids)
             # Only return videos that were both added and removed
             return [vid for vid in added if vid in removed]
@@ -245,7 +245,7 @@ class YouTubeAPI:
 
             while True:
                 request = self.youtube.playlistItems().list(
-                    part="id,contentDetails",
+                    part="snippet",
                     playlistId=playlist_id,
                     maxResults=50,
                     pageToken=page_token,
@@ -259,7 +259,7 @@ class YouTubeAPI:
 
                 # Map video IDs to item IDs
                 for item in response.get("items", []):
-                    video_id = item["contentDetails"]["videoId"]
+                    video_id = item["snippet"]["resourceId"]["videoId"]
                     if video_id in video_ids:
                         item_map[video_id] = item["id"]
 

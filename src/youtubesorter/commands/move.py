@@ -137,9 +137,10 @@ class MoveCommand(YouTubeCommand):
             if not self.dry_run:
                 try:
                     moved = self.youtube.batch_move_videos_to_playlist(
-                        [v["video_id"] for v in filtered_videos],
-                        self.source_playlist,
-                        self.target_playlist,
+                        playlist_id=self.target_playlist,
+                        video_ids=[v["video_id"] for v in filtered_videos],
+                        source_playlist_id=self.source_playlist,
+                        remove_from_source=True
                     )
 
                     # Update recovery state
@@ -157,7 +158,7 @@ class MoveCommand(YouTubeCommand):
                         for video in filtered_videos:
                             self.recovery.failed_videos.add(video["video_id"])
                         self.recovery.save_state()
-                    raise e
+                    raise
             else:
                 logger.info("Would move %d videos to target playlist", len(filtered_videos))
 
@@ -165,4 +166,4 @@ class MoveCommand(YouTubeCommand):
 
         except Exception as e:
             logger.error("Move command failed: %s", str(e))
-            return False
+            raise

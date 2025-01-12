@@ -1,9 +1,12 @@
 """Manages recovery state for interrupted operations."""
 
 import json
+import logging
 import os
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
+from . import errors
+from .api import YouTubeAPI
 from .config import RECOVERY_DIR
 from .logging_config import get_logger
 

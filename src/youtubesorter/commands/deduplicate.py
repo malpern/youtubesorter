@@ -3,7 +3,6 @@
 import logging
 from typing import Optional, List, Dict, Any
 
-from ..api import YouTubeAPI
 from ..core import YouTubeBase
 from ..recovery import RecoveryManager
 from ..common import find_latest_state

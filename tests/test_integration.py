@@ -57,9 +57,10 @@ class TestIntegration(unittest.TestCase):
                     mock_get.assert_called_once_with(self.source_playlist)
                     mock_classify.assert_called_once_with(self.test_videos, "test filter")
                     mock_move.assert_called_once_with(
-                        self.source_playlist,
-                        self.target_playlist,
-                        ["video1", "video2", "video3"],
+                        target_playlist_id=self.target_playlist,
+                        video_ids=["video1", "video2", "video3"],
+                        source_playlist_id=self.source_playlist,
+                        remove_from_source=True
                     )
 
                     self.assertEqual(successful, ["video1", "video2", "video3"])

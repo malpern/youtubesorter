@@ -3,7 +3,7 @@
 import json
 import os
 from datetime import datetime
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 from .config import STATE_DIR
 from .logging_config import get_logger
@@ -98,7 +98,6 @@ class UndoManager:
                 state = json.load(f)
 
             return UndoOperation(
-                timestamp=state["timestamp"],
                 operation_type=state["operation_type"],
                 source_playlists=state["source_playlists"],
                 target_playlists=state["target_playlists"],

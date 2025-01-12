@@ -1,17 +1,89 @@
-"""Consolidate videos from multiple playlists."""
+"""Consolidate videos from multiple playlists into one."""
 
 import argparse
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional, Set, Tuple
+import os
+from typing import Dict, List, Optional, Set, Tuple
 
 from . import common, errors
-from .api import YouTubeAPI
 from .core import YouTubeBase
-from .recovery import RecoveryManager
+from .errors import PlaylistNotFoundError, YouTubeError
+from .undo import UndoManager, UndoOperation
+from .config import STATE_DIR
 
 
 logger = logging.getLogger(__name__)
+
+
+class RecoveryManager:
+    """Manages recovery state for consolidate operations."""
+
+    def __init__(self, operation_type: str):
+        """Initialize recovery manager.
+        
+        Args:
+            operation_type: Type of operation (consolidate, move, etc)
+        """
+        self.operation_type = operation_type
+        self.processed_videos: Set[str] = set()
+        self.failed_videos: Set[str] = set()
+        self.target_mapping: Dict[str, str] = {}
+
+    def save_state(self) -> None:
+        """Save current recovery state."""
+        common.save_operation_state(
+            playlist_id=self.operation_type,
+            processed_videos=list(self.processed_videos),
+            failed_videos=list(self.failed_videos),
+            skipped_videos=[]  # Consolidate doesn't track skipped videos
+        )
+
+    def load_state(self) -> bool:
+        """Load previous recovery state.
+        
+        Returns:
+            bool: True if state was loaded successfully
+        """
+        try:
+            state_file = os.path.join(STATE_DIR, f"{self.operation_type}_state.json")
+            state = common.load_operation_state(state_file=state_file)
+            if not state or state.get("operation_type") != self.operation_type:
+                return False
+                
+            self.processed_videos = set(state.get("processed_videos", []))
+            self.failed_videos = set(state.get("failed_videos", []))
+            self.target_mapping = state.get("target_mapping", {})
+            return True
+        except Exception as e:
+            logger.error("Failed to load recovery state: %s", str(e))
+            return False
+
+    def add_processed_video(self, video_id: str, target_playlist: str) -> None:
+        """Add a successfully processed video.
+        
+        Args:
+            video_id: ID of processed video
+            target_playlist: Target playlist ID
+        """
+        self.processed_videos.add(video_id)
+        self.target_mapping[video_id] = target_playlist
+        self.save_state()
+
+    def add_failed_video(self, video_id: str) -> None:
+        """Add a failed video.
+        
+        Args:
+            video_id: ID of failed video
+        """
+        self.failed_videos.add(video_id)
+        self.save_state()
+
+    def clear_state(self) -> None:
+        """Clear recovery state."""
+        self.processed_videos.clear()
+        self.failed_videos.clear()
+        self.target_mapping.clear()
+        common.clear_operation_state()
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -60,172 +132,159 @@ def process_playlist(
     processed_videos: Optional[Set[str]] = None,
     failed_videos: Optional[Set[str]] = None,
 ) -> Tuple[List[str], List[str], List[str]]:
-    """Process a single playlist for consolidation.
+    """Process a single playlist.
 
     Args:
         youtube: YouTube API client
         source_playlist: Source playlist ID
         target_playlist: Target playlist ID
-        copy: Whether to copy instead of move videos
-        limit: Optional limit on number of videos to process
-        verbose: Whether to output verbose progress
+        copy: Whether to copy videos instead of moving them
+        limit: Maximum number of videos to process
+        verbose: Whether to log verbose output
         processed_videos: Set of already processed video IDs
         failed_videos: Set of failed video IDs
 
     Returns:
-        Tuple of (successful_moves, failed_moves, skipped_videos)
+        Tuple of (processed, failed, skipped) video IDs
     """
-    if processed_videos is None:
-        processed_videos = set()
-    if failed_videos is None:
-        failed_videos = set()
+    if verbose:
+        logger.info("Processing playlist: %s", source_playlist)
 
-    api = YouTubeAPI(youtube)
+    processed_videos = processed_videos or set()
+    failed_videos = failed_videos or set()
+
+    # Get videos from source playlist
+    videos = youtube.get_playlist_videos(source_playlist)
+    if not videos:
+        return [], [], []
+
+    # Filter out already processed videos
+    unprocessed_videos = [v for v in videos if v["video_id"] not in processed_videos]
+    skipped = [v["video_id"] for v in videos if v["video_id"] in processed_videos]
+
+    # Apply limit if specified
+    if limit:
+        unprocessed_videos = unprocessed_videos[:limit]
+
+    # Get video IDs
+    unprocessed_ids = [v["video_id"] for v in unprocessed_videos]
+    if not unprocessed_ids:
+        return [], [], skipped
+
+    # Move or copy videos
     try:
-        videos = api.get_playlist_videos(source_playlist)
-        if not videos:
-            logger.info("No videos found in source playlist")
-            return [], [], []
-
-        # Filter out already processed videos
-        videos = [v for v in videos if v["video_id"] not in processed_videos]
-        if limit:
-            videos = videos[:limit]
-
-        if not videos:
-            logger.info("No new videos to process")
-            return [], [], []
-
-        # Process videos
-        video_ids = [v["video_id"] for v in videos]
         if copy:
-            processed = api.batch_add_videos_to_playlist(target_playlist, video_ids)
+            processed = youtube.batch_add_videos_to_playlist(
+                playlist_id=target_playlist,
+                video_ids=unprocessed_ids
+            )
         else:
-            processed = api.batch_move_videos_to_playlist(
-                source_playlist, target_playlist, video_ids
+            processed = youtube.batch_move_videos_to_playlist(
+                playlist_id=target_playlist,
+                video_ids=unprocessed_ids,
+                source_playlist_id=source_playlist,
+                remove_from_source=True
             )
-
-        failed = [v for v in video_ids if v not in processed]
-        skipped = []
-
-        # Update tracking sets
-        processed_videos.update(processed)
-        failed_videos.update(failed)
-
-        if verbose:
-            logger.info(
-                "Processed %d videos from %s (%d failed, %d skipped)",
-                len(processed),
-                source_playlist,
-                len(failed),
-                len(skipped),
-            )
-
+        failed = [v for v in unprocessed_ids if v not in processed]
         return processed, failed, skipped
     except Exception as e:
-        logger.error("Error processing playlist %s: %s", source_playlist, str(e))
-        return [], [], []
+        logger.error("Failed to process videos: %s", str(e))
+        return [], unprocessed_ids, skipped
 
 
 def consolidate_playlists(
     youtube: YouTubeBase,
-    source_playlist_ids: List[str],
-    target_playlist_id: str,
+    source_playlists: List[str],
+    target_playlist: str,
     copy: bool = False,
-    limit: Optional[int] = None,
+    dry_run: bool = False,
     verbose: bool = False,
     resume: bool = False,
     retry_failed: bool = False,
-) -> None:
-    """Consolidate videos from multiple playlists into one.
+    limit: Optional[int] = None,
+    resume_destination: Optional[str] = None,
+) -> Tuple[List[str], List[str], List[str]]:
+    """Consolidate multiple playlists into one.
 
     Args:
         youtube: YouTube API client
-        source_playlist_ids: List of source playlist IDs
-        target_playlist_id: Target playlist ID
-        copy: Whether to copy instead of move videos
-        limit: Optional limit on number of videos to process
-        verbose: Whether to output verbose progress
-        resume: Whether to resume from last state
-        retry_failed: Whether to retry previously failed videos
+        source_playlists: List of source playlist IDs
+        target_playlist: Target playlist ID
+        copy: Whether to copy videos instead of moving them
+        dry_run: Whether to perform a dry run without making changes
+        verbose: Whether to log verbose output
+        resume: Whether to resume from a previous state
+        retry_failed: Whether to retry failed videos
+        limit: Maximum number of videos to process per playlist
+        resume_destination: Playlist ID to resume from
+
+    Returns:
+        Tuple of (processed video IDs, failed video IDs, skipped video IDs)
     """
-    # Initialize or load state
-    recovery_manager = RecoveryManager(
-        playlist_id=source_playlist_ids[0],  # Use first playlist as primary
-        operation_type="consolidate",
-    )
-
-    if resume:
-        processed_videos = set(recovery_manager.processed_videos)
-        failed_videos = set(recovery_manager.failed_videos)
-    else:
-        processed_videos = set()
-        failed_videos = set()
-
-    if retry_failed:
-        failed_videos.clear()
-
-    total_successful = []
+    recovery = RecoveryManager("consolidate")
+    total_processed = []
     total_failed = []
     total_skipped = []
 
-    # Process playlists sequentially to maintain consistent state
-    for playlist_id in source_playlist_ids:
+    # Load previous state if resuming
+    if resume:
         try:
-            # Calculate remaining limit for this playlist
-            remaining_limit = None
-            if limit is not None:
-                remaining_videos = limit - len(total_successful)
-                if remaining_videos <= 0:
-                    break
-                remaining_limit = remaining_videos
+            recovery.load_state()
+            if retry_failed:
+                total_failed = list(recovery.failed_videos)
+            else:
+                total_processed = list(recovery.processed_videos)
+                total_failed = list(recovery.failed_videos)
+        except Exception as e:
+            logger.error(f"No recovery state found: {e}")
+            if resume_destination:
+                raise YouTubeError("No recovery state found")
 
-            successful, failed, skipped = process_playlist(
+    # Validate target playlist exists
+    try:
+        target_info = youtube.get_playlist_info(target_playlist)
+        if verbose:
+            logger.info(f"Target playlist: {target_info['title']}")
+    except Exception as e:
+        logger.error(f"Failed to get target playlist info: {e}")
+        raise YouTubeError(f"Target playlist not found: {target_playlist}")
+
+    # Process each source playlist
+    start_processing = not resume_destination
+    for source_playlist in source_playlists:
+        if resume_destination and source_playlist == resume_destination:
+            start_processing = True
+        if not start_processing:
+            continue
+
+        try:
+            processed, failed, skipped = process_playlist(
                 youtube,
-                playlist_id,
-                target_playlist_id,
+                source_playlist,
+                target_playlist,
                 copy=copy,
-                limit=remaining_limit,
+                limit=limit,
                 verbose=verbose,
-                processed_videos=processed_videos,
-                failed_videos=failed_videos,
+                processed_videos=set(total_processed),
+                failed_videos=set(total_failed)
             )
-
-            total_successful.extend(successful)
+            total_processed.extend(processed)
             total_failed.extend(failed)
             total_skipped.extend(skipped)
 
-            # Update recovery state after each playlist
-            for video_id in successful:
-                recovery_manager.assign_video(video_id, target_playlist_id)
-            for video_id in failed:
-                recovery_manager.assign_video(video_id, target_playlist_id, success=False)
+            # Update recovery state
+            recovery.processed_videos = set(total_processed)
+            recovery.failed_videos = set(total_failed)
+            recovery.save_state()
 
-            if verbose:
-                logger.info("Completed processing playlist %s", playlist_id)
+        except PlaylistNotFoundError:
+            logger.error(f"Playlist not found: {source_playlist}")
+            continue
+        except YouTubeError as e:
+            logger.error(f"Failed to process playlist {source_playlist}: {e}")
+            continue
 
-        except Exception as e:
-            logger.error("Error processing playlist %s: %s", playlist_id, str(e))
-            total_failed.extend([playlist_id])
-
-    # Save operation for undo
-    common.save_operation_state(
-        target_playlist=target_playlist_id,
-        processed=total_successful,
-        failed=total_failed,
-        skipped=total_skipped,
-        state_file=".youtubesorter_undo_state.json",
-    )
-
-    # Log summary
-    common.log_operation_summary(
-        operation_type="consolidate",
-        target_playlist=target_playlist_id,
-        processed=total_successful,
-        failed=total_failed,
-        skipped=total_skipped,
-        verbose=verbose,
-    )
+    return total_processed, total_failed, total_skipped
 
 
 def undo_last_operation(youtube: YouTubeBase, verbose: bool = False) -> bool:

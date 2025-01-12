@@ -23,16 +23,16 @@ class TestAPIIntegration(unittest.TestCase):
             "items": [
                 {
                     "id": "item1",
-                    "contentDetails": {"videoId": "video1"},
                     "snippet": {
+                        "resourceId": {"videoId": "video1"},
                         "title": "Test Video 1",
                         "description": "Description 1",
                     },
                 },
                 {
                     "id": "item2",
-                    "contentDetails": {"videoId": "video2"},
                     "snippet": {
+                        "resourceId": {"videoId": "video2"},
                         "title": "Test Video 2",
                         "description": "Description 2",
                     },
@@ -45,8 +45,8 @@ class TestAPIIntegration(unittest.TestCase):
             "items": [
                 {
                     "id": "item3",
-                    "contentDetails": {"videoId": "video3"},
                     "snippet": {
+                        "resourceId": {"videoId": "video3"},
                         "title": "Test Video 3",
                         "description": "Description 3",
                     },
@@ -73,7 +73,7 @@ class TestAPIIntegration(unittest.TestCase):
         # Verify API was called correctly
         list_call = self.mock_youtube.playlistItems.return_value.list
         list_call.assert_called_with(
-            part="snippet,contentDetails",
+            part="snippet",
             playlistId="test_playlist",
             maxResults=50,
             pageToken="token123",
@@ -86,13 +86,17 @@ class TestAPIIntegration(unittest.TestCase):
             "items": [
                 {
                     "id": "item1",
-                    "contentDetails": {"videoId": "video1"},
-                    "snippet": {"title": "Video 1"},
+                    "snippet": {
+                        "resourceId": {"videoId": "video1"},
+                        "title": "Video 1"
+                    },
                 },
                 {
                     "id": "item2",
-                    "contentDetails": {"videoId": "video2"},
-                    "snippet": {"title": "Video 2"},
+                    "snippet": {
+                        "resourceId": {"videoId": "video2"},
+                        "title": "Video 2"
+                    },
                 },
             ]
         }
@@ -103,7 +107,10 @@ class TestAPIIntegration(unittest.TestCase):
 
         # Test batch move operation
         moved = self.api.batch_move_videos_to_playlist(
-            "source_playlist", "target_playlist", ["video1", "video2"], remove_from_source=True
+            target_playlist="target_playlist",
+            video_ids=["video1", "video2"],
+            source_playlist="source_playlist",
+            remove_from_source=True
         )
 
         # Verify results

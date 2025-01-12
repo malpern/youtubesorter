@@ -2,7 +2,7 @@
 
 from . import YouTubeCommand
 from ..logging_config import get_logger
-from ..api import YouTubeAPI
+from ..core import YouTubeBase
 
 logger = get_logger(__name__)
 
@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 class QuotaCommand(YouTubeCommand):
     """Command to check YouTube API quota usage."""
 
-    def __init__(self, youtube: YouTubeAPI) -> None:
+    def __init__(self, youtube: YouTubeBase) -> None:
         super().__init__(youtube)
         self.name = "quota"
         self.help = "Check YouTube API quota usage"

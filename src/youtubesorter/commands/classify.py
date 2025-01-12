@@ -10,7 +10,6 @@ This command inherits from YouTubeCommand (in src/commands/__init__.py) which pr
 import logging
 from typing import Optional, List, Dict, Any
 
-from ..api import YouTubeAPI
 from ..core import YouTubeBase
 from ..recovery import RecoveryManager
 from ..common import find_latest_state
@@ -75,15 +74,17 @@ class ClassifyCommand(YouTubeCommand):
             if not state_file:
                 raise ValueError(f"No recovery state found for playlist {self.source_playlist_id}")
 
-            with RecoveryManager(self.source_playlist_id, self.name) as recovery:
-                if self.resume_destination:
-                    if self.resume_destination not in recovery.destination_metadata:
-                        raise ValueError(
-                            f"Destination {self.resume_destination} not found in recovery state"
-                        )
-                    progress = recovery.get_destination_progress(self.resume_destination)
-                    if progress.get("completed", False):
-                        raise ValueError(f"Destination {self.resume_destination} already completed")
+            self.recovery = RecoveryManager(self.source_playlist_id, self.name)
+            self.recovery.load_state()  # Load state after validation
+            if self.resume_destination:
+                if self.resume_destination not in self.recovery.destination_metadata:
+                    raise ValueError(
+                        f"Destination {self.resume_destination} not found in recovery state"
+                    )
+                if self.recovery.get_destination_progress(self.resume_destination).get("completed"):
+                    raise ValueError(
+                        f"Destination {self.resume_destination} already completed"
+                    )
 
     def classify_video(self, video: Dict[str, Any]) -> Optional[str]:
         """Classify a video into a target playlist.
@@ -97,85 +98,33 @@ class ClassifyCommand(YouTubeCommand):
         return self.target_playlists[0] if self.target_playlists else None
 
     def _run(self) -> bool:
-        """Execute the command.
+        """Run the command."""
+        # Get videos to process
+        if self.resume:
+            videos = self.recovery.get_remaining_videos()
+        else:
+            videos = self.youtube.get_playlist_videos(self.source_playlist_id)
 
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            with RecoveryManager(
-                playlist_id=self.source_playlist_id, operation_type=self.name
-            ) as recovery:
-                self.recovery = recovery
+        if not videos:
+            logger.info("No videos to process")
+            return True
 
-                # Load previous state if resuming
-                if self.resume:
-                    recovery.load_state()
+        logger.info("Processing %d videos...", len(videos))
 
-                # Get videos from playlist
-                try:
-                    videos = self.youtube.get_playlist_videos(self.source_playlist_id)
-                    for video in videos:
-                        recovery.assign_video(video["video_id"], None, video_data=video)
-                except Exception as e:
-                    self._logger.error("Failed to get videos from playlist: %s", str(e))
-                    return False
+        # Process each video
+        for video in videos:
+            try:
+                target_playlist = self.classify_video(video)
+                if target_playlist:
+                    # Add video to target playlist
+                    self.youtube.batch_add_videos_to_playlist(
+                        [video["snippet"]["resourceId"]["videoId"]], target_playlist
+                    )
+                    self.recovery.add_processed_video(video["snippet"]["resourceId"]["videoId"])
+                else:
+                    self.recovery.add_skipped_video(video["snippet"]["resourceId"]["videoId"])
+            except Exception as e:
+                logger.error("Failed to process video '%s': %s", video["snippet"]["title"], str(e))
+                self.recovery.add_failed_video(video["snippet"]["resourceId"]["videoId"])
 
-                # Get remaining videos to process
-                remaining = recovery.get_remaining_videos()
-
-                if not remaining:
-                    self._logger.info("No videos to process")
-                    return True
-
-                self._logger.info("Processing %d videos...", len(remaining))
-
-                # Process each video
-                for video in remaining:
-                    video_id = video["video_id"]
-                    title = video.get("title", "Unknown")
-
-                    try:
-                        # Classify video
-                        target_playlist = self.classify_video(video)
-                        if not target_playlist:
-                            self._logger.info("No target playlist for video: %s", title)
-                            recovery.processed_videos.add(video_id)
-                            continue
-
-                        if self.dry_run:
-                            self._logger.info(
-                                "Would add video '%s' to playlist '%s'",
-                                title,
-                                target_playlist,
-                            )
-                            recovery.processed_videos.add(video_id)
-                            continue
-
-                        # Add video to target playlist
-                        try:
-                            added = self.youtube.batch_add_videos_to_playlist(
-                                [video_id], target_playlist
-                            )
-                            if video_id in added:
-                                recovery.processed_videos.add(video_id)
-                            else:
-                                self._logger.error("Failed to process %s: Video not added", title)
-                                recovery.failed_videos.add(video_id)
-                        except Exception as e:
-                            self._logger.error("Failed to process %s: %s", title, str(e))
-                            recovery.failed_videos.add(video_id)
-
-                        recovery.save_state()
-
-                    except Exception as e:
-                        self._logger.error("Failed to process %s: %s", title, str(e))
-                        recovery.failed_videos.add(video_id)
-                        recovery.save_state()
-
-                self._logger.info("Classification complete")
-                return True
-
-        except Exception as e:
-            self._logger.error("Error classifying videos: %s", str(e))
-            return False
+        return True

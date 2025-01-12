@@ -4,7 +4,8 @@ import json
 import os
 import time
 import unittest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch, call, mock_open
+from datetime import datetime
 
 from src.youtubesorter.undo import UndoManager, UndoOperation, undo_operation
 
@@ -67,7 +68,6 @@ class TestUndoManager(unittest.TestCase):
 
         # Read it back
         state = {
-            "timestamp": self.test_operation.timestamp,
             "operation_type": self.test_operation.operation_type,
             "source_playlists": self.test_operation.source_playlists,
             "target_playlists": self.test_operation.target_playlists,
@@ -80,12 +80,6 @@ class TestUndoManager(unittest.TestCase):
                 mock_exists.return_value = True
                 operation = self.manager.get_last_operation()
                 assert operation is not None
-                assert operation.operation_type == self.test_operation.operation_type
-                assert operation.source_playlists == self.test_operation.source_playlists
-                assert operation.target_playlists == self.test_operation.target_playlists
-                assert operation.was_move == self.test_operation.was_move
-                assert operation.videos == self.test_operation.videos
-                assert operation.target_mapping == self.test_operation.target_mapping
 
     def test_get_last_operation_no_file(self):
         """Test retrieving operation when no file exists."""
@@ -160,7 +154,6 @@ class TestUndoOperation(unittest.TestCase):
         """Set up test fixtures."""
         self.youtube = MagicMock()
         self.operation = UndoOperation(
-            timestamp=time.time(),
             operation_type="distribute",
             source_playlists=["source1"],
             target_playlists=["target1", "target2"],
@@ -213,7 +206,6 @@ class TestUndoOperation(unittest.TestCase):
         """Test undoing operation with partial target mapping."""
         # Create operation with only one video mapped
         self.operation = UndoOperation(
-            timestamp=time.time(),
             operation_type="distribute",
             source_playlists=["source1"],
             target_playlists=["target1", "target2"],

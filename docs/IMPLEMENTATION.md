@@ -275,3 +275,75 @@ class MyCommand(YouTubeCommand):
 ### Important Note
 DO NOT create new base command classes. The `YouTubeCommand` class in `src/commands/__init__.py` 
 is the single source of truth for command implementation patterns. 
+
+## YouTube API Field Patterns
+
+### Video ID Access
+We consistently use `snippet.resourceId.videoId` for accessing video IDs from playlist items. This is the preferred method as it:
+- Provides more complete metadata about the video
+- Is more stable across API versions
+- Matches current YouTube API best practices
+
+### Parameter Ordering Standards
+For consistency across the codebase, methods follow these parameter ordering rules:
+1. `playlist_id` always comes first for playlist-related operations
+2. `video_ids` follows as a list (never a set) to maintain order
+3. Optional parameters follow required parameters
+4. Boolean flags (e.g., `copy`, `verbose`) come last
+
+Example:
+```python
+def batch_move_videos_to_playlist(
+    playlist_id: str,           # Required, comes first
+    video_ids: List[str],       # Required list, comes second
+    remove_from_source: bool = True,  # Optional boolean flag
+) -> List[str]:
+    """Move multiple videos to a playlist."""
+```
+
+### Error Handling Pattern
+To prevent error message duplication and maintain clear stack traces:
+1. Low-level functions raise specific exceptions (PlaylistNotFoundError, YouTubeError)
+2. Mid-level functions may catch and re-raise with additional context
+3. Top-level functions (CLI, API endpoints) catch and format user-friendly messages
+
+### State Management in Tests
+Each test should:
+1. Set up its own clean state
+2. Clean up any persistent state after completion
+3. Not rely on state from other tests
+
+## Codebase Stability Guidelines
+
+### Stable Implementation Decisions
+1. **Video ID Field**: We consistently use `snippet.resourceId.videoId` for accessing video IDs from playlist items
+2. **Parameter Order**: Methods follow the standard order: `(playlist_id, video_ids, source_playlist_id, remove_from_source)`
+3. **Error Handling**: Standardized error handling with specific error types and clear error messages
+4. **Command Pattern**: All operations use the Command pattern through `YouTubeCommand` base class
+
+### Refactoring Guidelines
+1. **DO NOT start significant refactors without team discussion and explicit approval**
+2. **DO NOT change core API interfaces** - they are stable and have test coverage
+3. **DO NOT modify the Command pattern implementation** - it's a core architectural decision
+4. **DO NOT change error handling patterns** - they are standardized across the codebase
+
+### Acceptable Changes
+1. Bug fixes that maintain existing interfaces
+2. Performance optimizations that don't change APIs
+3. Documentation improvements
+4. New features that follow existing patterns
+5. Test coverage improvements
+
+### Required Approvals
+1. **Major Refactoring**: Requires team discussion and explicit approval
+2. **API Changes**: Must be discussed and approved by team
+3. **Architectural Changes**: Need thorough review and team consensus
+4. **Core Pattern Changes**: Require detailed proposal and approval
+
+### When Proposing Changes
+1. Document the current behavior
+2. Explain why the change is needed
+3. Provide test coverage metrics
+4. Include migration plan
+5. Consider backward compatibility
+6. Assess impact on existing features

@@ -1,236 +1,226 @@
-"""Tests for the core module."""
-
-from unittest.mock import MagicMock, patch
+"""Tests for core YouTube API functionality."""
 
 import pytest
+from unittest.mock import MagicMock, call
 
 from src.youtubesorter.core import YouTubeBase
-from src.youtubesorter.errors import PlaylistNotFoundError
+from src.youtubesorter.errors import PlaylistNotFoundError, YouTubeError
 
 
 @pytest.fixture
-def youtube_client():
-    """Create a mock YouTube client."""
-    return MagicMock()
-
-
-@pytest.fixture
-def youtube_base(youtube_client):
-    """Create a YouTubeBase instance with mock client."""
+def api(youtube_client: MagicMock) -> YouTubeBase:
+    """Create YouTubeBase instance with mock client.
+    
+    Args:
+        youtube_client: Mock YouTube API client
+        
+    Returns:
+        YouTubeBase: API instance for testing
+    """
     return YouTubeBase(youtube_client)
 
 
-def test_get_playlist_info_success(youtube_base, youtube_client):
-    """Test successful retrieval of playlist info."""
-    # Mock response data
-    mock_response = {
-        "items": [
-            {
-                "id": "playlist1",
-                "snippet": {
-                    "title": "Test Playlist",
-                    "description": "Test Description",
-                },
-            }
-        ]
-    }
-
-    # Set up mock
-    mock_request = MagicMock()
-    mock_request.execute.return_value = mock_response
-    youtube_client.playlists.return_value.list.return_value = mock_request
-
-    # Call function
-    info = youtube_base.get_playlist_info("playlist1")
-
-    # Verify results
-    assert info == {
-        "id": "playlist1",
-        "title": "Test Playlist",
-        "description": "Test Description",
-    }
+def test_get_playlist_info(api: YouTubeBase, youtube_client: MagicMock):
+    """Test getting playlist information."""
+    info = api.get_playlist_info("playlist1")
+    
+    assert info["title"] == "Playlist 1"
+    assert info["description"] == "Description 1"
+    
     youtube_client.playlists.return_value.list.assert_called_once_with(
         part="snippet",
         id="playlist1",
-        maxResults=1,
+        maxResults=1
     )
 
 
-def test_get_playlist_info_not_found(youtube_base, youtube_client):
-    """Test handling of playlist not found error."""
-    # Mock empty response
-    mock_response = {"items": []}
-    mock_request = MagicMock()
-    mock_request.execute.return_value = mock_response
-    youtube_client.playlists.return_value.list.return_value = mock_request
-
-    # Verify error is raised
+def test_get_playlist_info_not_found(api: YouTubeBase, youtube_client: MagicMock):
+    """Test getting info for non-existent playlist."""
+    youtube_client.playlists.return_value.list.return_value.execute.side_effect = Exception(
+        "playlistNotFound"
+    )
+    
     with pytest.raises(PlaylistNotFoundError):
-        youtube_base.get_playlist_info("nonexistent")
+        api.get_playlist_info("nonexistent")
 
 
-def test_get_playlist_info_api_error(youtube_base, youtube_client):
-    """Test handling of API error."""
-    # Mock API error
-    mock_request = MagicMock()
-    mock_request.execute.side_effect = Exception("API error")
-    youtube_client.playlists.return_value.list.return_value = mock_request
-
-    # Verify error is propagated
-    with pytest.raises(Exception):
-        youtube_base.get_playlist_info("playlist1")
-
-
-def test_get_playlist_info_missing_description(youtube_base, youtube_client):
-    """Test handling of missing description field."""
-    # Mock response without description
-    mock_response = {
-        "items": [
-            {
-                "id": "playlist1",
-                "snippet": {
-                    "title": "Test Playlist",
-                },
-            }
-        ]
-    }
-
-    # Set up mock
-    mock_request = MagicMock()
-    mock_request.execute.return_value = mock_response
-    youtube_client.playlists.return_value.list.return_value = mock_request
-
-    # Call function
-    info = youtube_base.get_playlist_info("playlist1")
-
-    # Verify results
-    assert info == {
-        "id": "playlist1",
-        "title": "Test Playlist",
-        "description": "",
-    }
-
-
-def test_get_playlist_videos_success(youtube_base, youtube_client):
-    """Test successful retrieval of playlist videos."""
-    # Mock response data for two pages
-    mock_responses = [
-        {
-            "items": [
-                {
-                    "snippet": {
-                        "resourceId": {"videoId": "vid1"},
-                        "title": "Video 1",
-                        "description": "Desc 1",
-                    }
-                }
-            ],
-            "nextPageToken": "token1",
-        },
-        {
-            "items": [
-                {
-                    "snippet": {
-                        "resourceId": {"videoId": "vid2"},
-                        "title": "Video 2",
-                        "description": "Desc 2",
-                    }
-                }
-            ],
-        },
-    ]
-
-    # Set up mock
-    mock_request = MagicMock()
-    mock_request.execute.side_effect = mock_responses
-    youtube_client.playlistItems.return_value.list.return_value = mock_request
-
-    # Call function
-    videos = youtube_base.get_playlist_videos("playlist1")
-
-    # Verify results
+def test_get_playlist_videos(api: YouTubeBase, youtube_client: MagicMock):
+    """Test getting videos from playlist."""
+    videos = api.get_playlist_videos("playlist1")
+    
     assert len(videos) == 2
-    assert videos[0] == {
-        "video_id": "vid1",
-        "title": "Video 1",
-        "description": "Desc 1",
-    }
-    assert videos[1] == {
-        "video_id": "vid2",
-        "title": "Video 2",
-        "description": "Desc 2",
-    }
-
-    # Verify API calls
-    youtube_client.playlistItems.return_value.list.assert_any_call(
+    assert videos[0]["video_id"] == "vid1"
+    assert videos[0]["title"] == "Video 1"
+    
+    youtube_client.playlistItems.return_value.list.assert_called_with(
         part="snippet",
         playlistId="playlist1",
         maxResults=50,
-        pageToken=None,
-    )
-    youtube_client.playlistItems.return_value.list.assert_any_call(
-        part="snippet",
-        playlistId="playlist1",
-        maxResults=50,
-        pageToken="token1",
+        pageToken=None
     )
 
 
-def test_get_playlist_videos_empty(youtube_base, youtube_client):
-    """Test handling of empty playlist."""
-    # Mock empty response
-    mock_response = {"items": []}
-    mock_request = MagicMock()
-    mock_request.execute.return_value = mock_response
-    youtube_client.playlistItems.return_value.list.return_value = mock_request
-
-    # Call function
-    videos = youtube_base.get_playlist_videos("playlist1")
-
-    # Verify results
-    assert videos == []
-
-
-def test_get_playlist_videos_api_error(youtube_base, youtube_client):
-    """Test handling of API error."""
-    # Mock API error
-    mock_request = MagicMock()
-    mock_request.execute.side_effect = Exception("API error")
-    youtube_client.playlistItems.return_value.list.return_value = mock_request
-
-    # Call function
-    videos = youtube_base.get_playlist_videos("playlist1")
-
-    # Verify results
-    assert videos == []
-
-
-def test_get_playlist_videos_missing_description(youtube_base, youtube_client):
-    """Test handling of missing description field."""
-    # Mock response without description
-    mock_response = {
+def test_get_playlist_videos_pagination(api: YouTubeBase, youtube_client: MagicMock):
+    """Test getting videos with pagination."""
+    # First page has next token
+    first_response = {
         "items": [
             {
                 "snippet": {
                     "resourceId": {"videoId": "vid1"},
                     "title": "Video 1",
+                    "description": "Description 1"
+                }
+            }
+        ],
+        "nextPageToken": "token1"
+    }
+    # Second page has no next token
+    second_response = {
+        "items": [
+            {
+                "snippet": {
+                    "resourceId": {"videoId": "vid2"},
+                    "title": "Video 2",
+                    "description": "Description 2"
                 }
             }
         ]
     }
+    
+    youtube_client.playlistItems.return_value.list.return_value.execute.side_effect = [
+        first_response,
+        second_response
+    ]
+    
+    videos = api.get_playlist_videos("playlist1")
+    
+    assert len(videos) == 2
+    assert videos[0]["video_id"] == "vid1"
+    assert videos[1]["video_id"] == "vid2"
+    
+    # Verify both pages were requested
+    calls = youtube_client.playlistItems.return_value.list.call_args_list
+    assert len(calls) == 2
+    assert calls[0] == call(part="snippet", playlistId="playlist1", maxResults=50, pageToken=None)
+    assert calls[1] == call(part="snippet", playlistId="playlist1", maxResults=50, pageToken="token1")
 
-    # Set up mock
-    mock_request = MagicMock()
-    mock_request.execute.return_value = mock_response
-    youtube_client.playlistItems.return_value.list.return_value = mock_request
 
-    # Call function
-    videos = youtube_base.get_playlist_videos("playlist1")
+def test_get_playlist_videos_not_found(api: YouTubeBase, youtube_client: MagicMock):
+    """Test getting videos from non-existent playlist."""
+    youtube_client.playlistItems.return_value.list.return_value.execute.side_effect = Exception(
+        "playlistNotFound"
+    )
+    
+    with pytest.raises(PlaylistNotFoundError):
+        api.get_playlist_videos("nonexistent")
 
-    # Verify results
-    assert len(videos) == 1
-    assert videos[0] == {
-        "video_id": "vid1",
-        "title": "Video 1",
-        "description": "",
-    }
+
+def test_batch_add_videos_to_playlist(api: YouTubeBase, youtube_client: MagicMock):
+    """Test adding multiple videos to playlist."""
+    video_ids = ["vid1", "vid2"]
+    successful = api.batch_add_videos_to_playlist(
+        playlist_id="playlist1",
+        video_ids=video_ids
+    )
+    
+    assert successful == video_ids
+    assert youtube_client.playlistItems.return_value.insert.call_count == 2
+
+
+def test_batch_add_videos_playlist_not_found(api: YouTubeBase, youtube_client: MagicMock):
+    """Test adding videos to non-existent playlist."""
+    youtube_client.playlistItems.return_value.insert.return_value.execute.side_effect = Exception(
+        "playlistNotFound"
+    )
+    
+    with pytest.raises(PlaylistNotFoundError):
+        api.batch_add_videos_to_playlist(
+            playlist_id="nonexistent",
+            video_ids=["vid1"]
+        )
+
+
+def test_batch_add_videos_partial_failure(api: YouTubeBase, youtube_client: MagicMock):
+    """Test handling partial failure when adding videos."""
+    # First video succeeds, second fails
+    youtube_client.playlistItems.return_value.insert.return_value.execute.side_effect = [
+        {},
+        Exception("API Error")
+    ]
+    
+    successful = api.batch_add_videos_to_playlist(
+        playlist_id="playlist1",
+        video_ids=["vid1", "vid2"]
+    )
+    
+    assert successful == ["vid1"]
+
+
+def test_batch_remove_videos_from_playlist(api: YouTubeBase, youtube_client: MagicMock):
+    """Test removing multiple videos from playlist."""
+    successful = api.batch_remove_videos_from_playlist(
+        playlist_id="playlist1",
+        video_ids=["vid1", "vid2"]
+    )
+    
+    assert successful == ["vid1", "vid2"]
+    assert youtube_client.playlistItems.return_value.delete.call_count == 2
+
+
+def test_batch_remove_videos_playlist_not_found(api: YouTubeBase, youtube_client: MagicMock):
+    """Test removing videos from non-existent playlist."""
+    youtube_client.playlistItems.return_value.list.return_value.execute.side_effect = Exception(
+        "playlistNotFound"
+    )
+    
+    with pytest.raises(PlaylistNotFoundError):
+        api.batch_remove_videos_from_playlist(
+            playlist_id="nonexistent",
+            video_ids=["vid1"]
+        )
+
+
+def test_batch_remove_videos_partial_failure(api: YouTubeBase, youtube_client: MagicMock):
+    """Test handling partial failure when removing videos."""
+    # First delete succeeds, second fails
+    youtube_client.playlistItems.return_value.delete.return_value.execute.side_effect = [
+        {},
+        Exception("API Error")
+    ]
+    
+    successful = api.batch_remove_videos_from_playlist(
+        playlist_id="playlist1",
+        video_ids=["vid1", "vid2"]
+    )
+    
+    assert successful == ["vid1"]
+
+
+def test_batch_move_videos_to_playlist(api: YouTubeBase, youtube_client: MagicMock):
+    """Test moving videos between playlists."""
+    video_ids = ["vid1", "vid2"]
+    successful = api.batch_move_videos_to_playlist(
+        playlist_id="target1",
+        video_ids=video_ids,
+        source_playlist_id="source1",
+        remove_from_source=True
+    )
+    
+    assert successful == video_ids
+    assert youtube_client.playlistItems.return_value.insert.call_count == 2
+    assert youtube_client.playlistItems.return_value.delete.call_count == 2
+
+
+def test_batch_move_videos_without_remove(api: YouTubeBase, youtube_client: MagicMock):
+    """Test moving videos without removing from source."""
+    video_ids = ["vid1", "vid2"]
+    successful = api.batch_move_videos_to_playlist(
+        playlist_id="target1",
+        video_ids=video_ids,
+        remove_from_source=False
+    )
+    
+    assert successful == video_ids
+    assert youtube_client.playlistItems.return_value.insert.call_count == 2
+    assert youtube_client.playlistItems.return_value.delete.call_count == 0

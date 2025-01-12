@@ -3,24 +3,24 @@
 from unittest.mock import MagicMock, patch
 import pytest
 
+from src.youtubesorter.api import YouTubeAPI
 from src.youtubesorter.commands.classify import ClassifyCommand
 from src.youtubesorter.errors import YouTubeError
-from src.youtubesorter.core import YouTubeBase
-
-
-class MockYouTubeBase(YouTubeBase):
-    """Mock YouTube base class."""
-
-    def __init__(self):
-        """Initialize mock."""
-        self.get_playlist_videos = MagicMock()
-        self.batch_add_videos_to_playlist = MagicMock()
 
 
 @pytest.fixture
 def mock_youtube():
-    """Create mock YouTube client."""
-    return MockYouTubeBase()
+    """Create a mock YouTube API client."""
+    mock = MagicMock(spec=YouTubeAPI)
+    mock.get_playlist_info.return_value = {"title": "Test Playlist"}
+    mock.get_playlist_videos.return_value = [
+        {"video_id": "video1", "title": "Test Video 1"},
+        {"video_id": "video2", "title": "Test Video 2"},
+    ]
+    mock.batch_move_videos_to_playlist.return_value = ["video1", "video2"]
+    mock.batch_add_videos_to_playlist.return_value = ["video1", "video2"]
+    mock.batch_remove_videos_from_playlist.return_value = ["video1", "video2"]
+    return mock
 
 
 def test_classify_command_init(mock_youtube):
@@ -181,6 +181,7 @@ def test_classify_command_run_with_videos(mock_recovery_manager, mock_youtube):
         source_playlist_id="source123",
         target_playlists=["target1"],
     )
+    cmd.recovery = mock_recovery  # Set recovery manager before running
     assert cmd._run()
     mock_youtube.batch_add_videos_to_playlist.assert_called_once_with(["vid1"], "target1")
 
@@ -203,6 +204,7 @@ def test_classify_command_run_dry_run(mock_recovery_manager, mock_youtube):
         target_playlists=["target1"],
         dry_run=True,
     )
+    cmd.recovery = mock_recovery  # Set recovery manager before running
     assert cmd._run()
     mock_youtube.batch_add_videos_to_playlist.assert_not_called()
 
@@ -225,6 +227,7 @@ def test_classify_command_run_with_error(mock_recovery_manager, mock_youtube):
         source_playlist_id="source123",
         target_playlists=["target1"],
     )
+    cmd.recovery = mock_recovery  # Set recovery manager before running
     assert cmd._run()  # Should still return True as it's a per-video error
     assert "vid1" in mock_recovery.failed_videos
 
@@ -244,4 +247,5 @@ def test_classify_command_run_with_playlist_error(mock_recovery_manager, mock_yo
         source_playlist_id="source123",
         target_playlists=["target1"],
     )
+    cmd.recovery = mock_recovery  # Set recovery manager before running
     assert not cmd._run()  # Should return False for playlist-level errors

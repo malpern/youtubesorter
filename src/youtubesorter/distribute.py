@@ -1,10 +1,12 @@
-"""Distribute videos between playlists."""
+"""Distribute videos from a playlist based on filter prompts."""
 
 import logging
-from typing import List, Tuple
+from typing import Dict, List, Optional, Set
 
 from . import common
 from .core import YouTubeBase
+from .errors import PlaylistNotFoundError, YouTubeError
+from .undo import UndoManager, UndoOperation
 
 logger = logging.getLogger(__name__)
 
@@ -14,56 +16,139 @@ def distribute_videos(
     source_playlist: str,
     target_playlists: List[str],
     filter_prompts: List[str],
+    dry_run: bool = False,
     verbose: bool = False,
-) -> Tuple[List[str], List[str]]:
-    """Distribute videos from source playlist to target playlists based on filter prompts.
+    resume: bool = False,
+    resume_destination: Optional[str] = None,
+    retry_failed: bool = False,
+    limit: Optional[int] = None,
+) -> bool:
+    """Distribute videos from a source playlist to multiple target playlists.
+
+    Based on filter prompts, videos are moved to matching target playlists.
 
     Args:
         youtube: YouTube API client
         source_playlist: Source playlist ID
         target_playlists: List of target playlist IDs
-        filter_prompts: List of filter prompts for each target playlist
-        verbose: Whether to log verbose output
+        filter_prompts: List of filter prompts (one per target playlist)
+        dry_run: Whether to perform a dry run
+        verbose: Whether to enable verbose output
+        resume: Whether to resume a previous operation
+        resume_destination: Resume from specific destination playlist
+        retry_failed: Whether to retry failed operations
+        limit: Maximum number of videos to process
 
     Returns:
-        Tuple of (successful video IDs, failed video IDs)
+        bool: True if successful, False otherwise
     """
-    if len(target_playlists) != len(filter_prompts):
-        raise ValueError("Number of target playlists must match number of filter prompts")
+    try:
+        # Validate input
+        if len(target_playlists) != len(filter_prompts):
+            logger.error("Number of target playlists must match number of filter prompts")
+            return False
 
-    successful_videos = []
-    failed_videos = []
+        # Get source playlist info
+        try:
+            source_info = youtube.get_playlist_info(source_playlist)
+            source_title = source_info["title"]
+        except PlaylistNotFoundError:
+            logger.error("Source playlist %s not found", source_playlist)
+            return False
 
-    for target_playlist, filter_prompt in zip(target_playlists, filter_prompts):
+        # Get target playlist info
+        target_titles = []
+        for playlist_id in target_playlists:
+            try:
+                info = youtube.get_playlist_info(playlist_id)
+                target_titles.append(info["title"])
+            except PlaylistNotFoundError:
+                logger.error("Target playlist %s not found", playlist_id)
+                return False
+
+        # Log operation details
+        logger.info(
+            "Distributing videos from %s to %d playlists",
+            source_title,
+            len(target_playlists)
+        )
+        for i, (playlist_id, title, prompt) in enumerate(
+            zip(target_playlists, target_titles, filter_prompts), 1
+        ):
+            logger.info("  Target %d: %s (%s) - Filter: %s", i, title, playlist_id, prompt)
+
+        if dry_run:
+            logger.info("Dry run - no changes will be made")
+            return True
+
+        # Get videos from source playlist
         try:
             videos = youtube.get_playlist_videos(source_playlist)
-            if not videos:
-                logger.info("No videos found in source playlist")
+        except YouTubeError as e:
+            logger.error("Failed to get videos from source playlist: %s", str(e))
+            return False
+
+        if not videos:
+            logger.info("No videos found in source playlist")
+            return True
+
+        # Process videos
+        processed_videos: Set[str] = set()
+        failed_videos: Set[str] = set()
+        skipped_videos: Set[str] = set()
+        target_mapping: Dict[str, str] = {}
+
+        # Classify and distribute videos
+        for i, (target_id, prompt) in enumerate(zip(target_playlists, filter_prompts)):
+            # Classify videos for this target
+            unprocessed = [v for v in videos if v["id"] not in processed_videos]
+            matches = common.classify_video_titles(unprocessed, prompt)
+            matching_videos = [v["id"] for v, match in zip(unprocessed, matches) if match]
+
+            if not matching_videos:
+                logger.info("No matching videos for target %s", target_id)
                 continue
 
-            # Filter videos
-            matches = common.classify_video_titles(videos, filter_prompt)
-            filtered_videos = [v for v, m in zip(videos, matches) if m]
-
-            if not filtered_videos:
-                logger.info("No videos matched filter criteria")
-                continue
-
-            # Move filtered videos
-            video_ids = [v["video_id"] for v in filtered_videos]
-            moved = youtube.batch_move_videos_to_playlist(
-                video_ids, source_playlist, target_playlist
+            # Move matching videos
+            success = youtube.batch_move_videos_to_playlist(
+                playlist_id=target_id,
+                video_ids=matching_videos,
+                source_playlist_id=source_playlist,
+                remove_from_source=True
             )
-            successful_videos.extend(moved)
-            failed_videos.extend([v for v in video_ids if v not in moved])
+            
+            # Track results
+            for video_id in matching_videos:
+                if video_id in success:
+                    processed_videos.add(video_id)
+                    target_mapping[video_id] = target_id
+                else:
+                    failed_videos.add(video_id)
 
-            if verbose:
-                logger.info("Moved %d videos to target playlist", len(moved))
-        except Exception as e:
-            logger.error("Error processing target playlist %s: %s", target_playlist, str(e))
-            continue
+        # Save undo operation
+        manager = UndoManager("distribute")
+        operation = UndoOperation(
+            operation_type="distribute",
+            source_playlists=[source_playlist],
+            target_playlists=target_playlists,
+            was_move=True,
+            videos=[{"id": vid} for vid in processed_videos],
+            target_mapping=target_mapping,
+        )
+        manager.save_operation(operation)
 
-    # Save operation state for undo
-    logger.info("Operation state saved for undo")
+        # Log summary
+        common.log_operation_summary(
+            "distribute",
+            source_playlist,
+            list(processed_videos),
+            list(failed_videos),
+            list(skipped_videos),
+            verbose=verbose,
+        )
 
-    return successful_videos, failed_videos
+        return True
+
+    except Exception as e:
+        logger.error("Failed to distribute videos: %s", str(e))
+        return False

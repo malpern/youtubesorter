@@ -24,13 +24,19 @@ def youtube_client():
         "items": [
             {
                 "id": "item1",
-                "contentDetails": {"videoId": "vid1"},
-                "snippet": {"title": "Video 1", "description": "Description 1"},
+                "snippet": {
+                    "resourceId": {"videoId": "vid1"},
+                    "title": "Video 1",
+                    "description": "Description 1"
+                },
             },
             {
                 "id": "item2",
-                "contentDetails": {"videoId": "vid2"},
-                "snippet": {"title": "Video 2", "description": "Description 2"},
+                "snippet": {
+                    "resourceId": {"videoId": "vid2"},
+                    "title": "Video 2",
+                    "description": "Description 2"
+                },
             },
         ]
     }
@@ -72,7 +78,7 @@ def test_get_playlist_videos(api, youtube_client):
     assert videos[0]["description"] == "Description 1"
 
     youtube_client.playlistItems.return_value.list.assert_called_once_with(
-        part="snippet,contentDetails",
+        part="snippet",
         playlistId="playlist1",
         maxResults=50,
         pageToken=None,
@@ -86,8 +92,11 @@ def test_get_playlist_videos_pagination(api, youtube_client):
         "items": [
             {
                 "id": "item1",
-                "contentDetails": {"videoId": "vid1"},
-                "snippet": {"title": "Video 1", "description": "Desc 1"},
+                "snippet": {
+                    "resourceId": {"videoId": "vid1"},
+                    "title": "Video 1",
+                    "description": "Desc 1"
+                },
             }
         ],
         "nextPageToken": "token1",
@@ -97,8 +106,11 @@ def test_get_playlist_videos_pagination(api, youtube_client):
         "items": [
             {
                 "id": "item2",
-                "contentDetails": {"videoId": "vid2"},
-                "snippet": {"title": "Video 2", "description": "Desc 2"},
+                "snippet": {
+                    "resourceId": {"videoId": "vid2"},
+                    "title": "Video 2",
+                    "description": "Desc 2"
+                },
             }
         ],
     }
@@ -179,8 +191,20 @@ def test_batch_remove_videos_from_playlist(api, youtube_client):
     # Mock getting playlist items
     youtube_client.playlistItems.return_value.list.return_value.execute.return_value = {
         "items": [
-            {"id": "item1", "contentDetails": {"videoId": "vid1"}},
-            {"id": "item2", "contentDetails": {"videoId": "vid2"}},
+            {
+                "id": "item1",
+                "snippet": {
+                    "resourceId": {"videoId": "vid1"},
+                    "title": "Video 1"
+                },
+            },
+            {
+                "id": "item2",
+                "snippet": {
+                    "resourceId": {"videoId": "vid2"},
+                    "title": "Video 2"
+                },
+            },
         ]
     }
 
@@ -205,13 +229,30 @@ def test_batch_move_videos_to_playlist(api, youtube_client):
     # Mock getting playlist items for removal
     youtube_client.playlistItems.return_value.list.return_value.execute.return_value = {
         "items": [
-            {"id": "item1", "contentDetails": {"videoId": "vid1"}},
-            {"id": "item2", "contentDetails": {"videoId": "vid2"}},
+            {
+                "id": "item1",
+                "snippet": {
+                    "resourceId": {"videoId": "vid1"},
+                    "title": "Video 1"
+                },
+            },
+            {
+                "id": "item2",
+                "snippet": {
+                    "resourceId": {"videoId": "vid2"},
+                    "title": "Video 2"
+                },
+            },
         ]
     }
 
     video_ids = ["vid1", "vid2"]
-    successful = api.batch_move_videos_to_playlist("source", "target", video_ids)
+    successful = api.batch_move_videos_to_playlist(
+        target_playlist="target",
+        video_ids=video_ids,
+        source_playlist="source",
+        remove_from_source=True
+    )
 
     assert successful == video_ids
     assert youtube_client.playlistItems.return_value.insert.call_count == 2
@@ -222,7 +263,10 @@ def test_batch_move_videos_without_remove(api, youtube_client):
     """Test moving videos without removing from source."""
     video_ids = ["vid1", "vid2"]
     successful = api.batch_move_videos_to_playlist(
-        "source", "target", video_ids, remove_from_source=False
+        target_playlist="target",
+        video_ids=video_ids,
+        source_playlist="source",
+        remove_from_source=False
     )
 
     assert successful == video_ids
@@ -283,13 +327,29 @@ def test_module_batch_move_videos(mock_get_service, youtube_client):
     # Mock getting playlist items for removal
     youtube_client.playlistItems.return_value.list.return_value.execute.return_value = {
         "items": [
-            {"id": "item1", "contentDetails": {"videoId": "vid1"}},
-            {"id": "item2", "contentDetails": {"videoId": "vid2"}},
+            {
+                "id": "item1",
+                "snippet": {
+                    "resourceId": {"videoId": "vid1"},
+                    "title": "Video 1"
+                },
+            },
+            {
+                "id": "item2",
+                "snippet": {
+                    "resourceId": {"videoId": "vid2"},
+                    "title": "Video 2"
+                },
+            },
         ]
     }
 
     video_ids = ["vid1", "vid2"]
-    successful = batch_move_videos_to_playlist("source", "target", video_ids)
+    successful = batch_move_videos_to_playlist(
+        target_playlist="target",
+        video_ids=video_ids,
+        source_playlist="source"
+    )
     assert successful == video_ids
 
 
@@ -339,14 +399,26 @@ def test_batch_remove_videos_pagination(api, youtube_client):
     # First response has next page token
     first_response = {
         "items": [
-            {"id": "item1", "contentDetails": {"videoId": "vid1"}},
+            {
+                "id": "item1",
+                "snippet": {
+                    "resourceId": {"videoId": "vid1"},
+                    "title": "Video 1"
+                },
+            },
         ],
         "nextPageToken": "token1",
     }
     # Second response has the second video
     second_response = {
         "items": [
-            {"id": "item2", "contentDetails": {"videoId": "vid2"}},
+            {
+                "id": "item2",
+                "snippet": {
+                    "resourceId": {"videoId": "vid2"},
+                    "title": "Video 2"
+                },
+            },
         ]
     }
 
@@ -369,8 +441,20 @@ def test_batch_remove_videos_api_error(api, youtube_client):
     """Test handling API errors when removing videos."""
     youtube_client.playlistItems.return_value.list.return_value.execute.return_value = {
         "items": [
-            {"id": "item1", "contentDetails": {"videoId": "vid1"}},
-            {"id": "item2", "contentDetails": {"videoId": "vid2"}},
+            {
+                "id": "item1",
+                "snippet": {
+                    "resourceId": {"videoId": "vid1"},
+                    "title": "Video 1"
+                },
+            },
+            {
+                "id": "item2",
+                "snippet": {
+                    "resourceId": {"videoId": "vid2"},
+                    "title": "Video 2"
+                },
+            },
         ]
     }
 
